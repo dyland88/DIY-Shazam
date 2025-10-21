@@ -4,7 +4,7 @@ import librosa
 import librosa.display
 import numpy as np
 import matplotlib
-matplotlib.use('TkAgg')
+# matplotlib.use('TkAgg')  # Commented out - let matplotlib choose the best backend
 import matplotlib.pyplot as plt
 
 def generate_spectrogram(signal, fft_size=2048, hop_size=None, window_size=None):
