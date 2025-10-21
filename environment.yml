@@ -1,0 +1,15 @@
+# run conda env create -f environment.yml
+name: diy-shazam
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scipy
+  - librosa
+  - matplotlib
+  - pip
+  - pip:
+      - soundfile
