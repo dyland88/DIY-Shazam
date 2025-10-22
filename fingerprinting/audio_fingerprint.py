@@ -8,7 +8,7 @@ This module implements the core fingerprinting algorithm used by Shazam:
 """
 
 import numpy as np
-from scipy.ndimage import maximum_filter
+from scipy.ndimage import maximum_filter, uniform_filter
 from typing import List, Tuple
 import hashlib
 
@@ -24,8 +24,51 @@ def find_peaks(spectrogram: np.ndarray,
     :param amplitude_threshold: Minimum amplitude (in dB) for a peak to be considered
     :return: List of (time_idx, freq_idx) tuples representing peak locations
     """
+
+    def cfar(train_size: Tuple[int, int], guard_size: Tuple[int, int], threshold_factor: float) -> np.ndarray:
+        """
+        Implements the Constant False Alarm Rate (CFAR) algorithm.
+        
+        :param train_size: Tuple of (train_size_rows, train_size_cols)
+        :param guard_size: Tuple of (guard_size_rows, guard_size_cols)
+        :param threshold_factor: Factor to multiply the noise estimate by
+        :return: 2D array of CFAR values
+        """
+
+        if train_size[0] % 2 == 0 or train_size[1] % 2 == 0:
+            raise ValueError("Train size must be odd")
+        if guard_size[0] % 2 == 0 or guard_size[1] % 2 == 0:
+            raise ValueError("Guard size must be odd")
+        
+        if guard_size[0] >= train_size[0] or guard_size[1] >= train_size[1]:
+            raise ValueError("Guard size must be less than train size")
+        
+        if threshold_factor <= 0:
+            raise ValueError("Threshold factor must be positive")
+        
+        train_cells = train_size[0] * train_size[1]
+        guard_cells = guard_size[0] * guard_size[1]
+        background_cells = train_cells - guard_cells
+
+        train_sum = uniform_filter(spectrogram, size=train_size, mode='constant', cval=0) * train_cells
+        guard_sum = uniform_filter(spectrogram, size=guard_size, mode='constant', cval=0) * guard_cells
+
+        background_sum = train_sum - guard_sum
+        background_mean = background_sum / background_cells
+
+        threshold_image = threshold_factor + background_mean
+
+        peaks = spectrogram > threshold_image
+        return peaks
+
     # Apply maximum filter to find local maxima
     local_max = maximum_filter(spectrogram, size=neighborhood_size) == spectrogram
+    train_size = (35, 35)
+    guard_size = (15, 15)
+    threshold_factor = 15
+    print("Cfaring...")
+    cfar_peaks = cfar(train_size, guard_size, threshold_factor)
+
     
     # Apply amplitude threshold
     above_threshold = spectrogram > amplitude_threshold
@@ -40,7 +83,7 @@ def find_peaks(spectrogram: np.ndarray,
     # Note: argwhere returns (row, col) which is (freq, time) in spectrogram
     # We swap to (time, freq) for intuitive ordering
     peaks_list = [(int(time), int(freq)) for freq, time in peak_indices]
-    
+    print(f"Peaks shape: {np.shape(peaks_list)}")
     return peaks_list
 
 
