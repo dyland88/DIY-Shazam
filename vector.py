@@ -1,8 +1,22 @@
-import numpy as np
-import faiss
+from pinecone import Pinecone
 
-mock_database = [1.5523, 4.323231, 5.4213213, 9.231321, 10.2312414, 2.33334]
+pc = Pinecone(api_key="pcsk_5jbA3t_Rmw7FnvLAcYYuporoMJdQfp7MSXtySoZRFZHxgNZFmYCynncVr5QVDrjMtaYfbc")
+index_name = "shazam-3d"
 
+
+#check if index exists, if not create one
+if not pc.has_index(index_name):
+    pc.create_index(
+        name=index_name,
+        dimension = 3,
+        metric = "cosine", # Use cosine similarity (good for audio, ignores volume differences)
+        spec={"serverless": {"cloud": "aws", "region": "us-east-1"}}
+    )
+
+
+index = pc.Index(index_name)
+
+#creates metadata about mock songs
 songs = {
     0: "Pasadena by Elijah Fox",
     1: "Party Rock",
@@ -12,20 +26,36 @@ songs = {
     5: "In a Sentimental Mood by Duke Ellington and John Coltrane",
 }
 
-d = 1                           # dimension
 
-query_vector = (float(input("Enter query vector here: ")))
+# Mock 3D vectors extracted from spectrograms (these would come from real audio later)
+# Each vector represents the "fingerprint" of a song
+mock_vectors = [
+    [0.1, 0.5, 0.9],
+    [0.2, 0.6, 0.8],
+    [0.15, 0.55, 0.85],
+    [0.8, 0.2, 0.1],
+    [0.9, 0.1, 0.2],
+    [0.85, 0.15, 0.15],
+]
 
-reshaped_query = np.array(query_vector).reshape(1,d)
+# Create a list of tuples to store in Pinecone
+# This loops through each vector and creates a tuple with:
+#   - str(i): unique ID as a string
+#   - vector: the 3D vector itself
+#   - {"song": songs[i]}: metadata dict with the song name
+vectors_to_store = [
+    (str(i), vector, {"song": songs[i]})
+    for i, vector in enumerate(mock_vectors)
+]
 
-mock_database = np.array(mock_database)
-index_data = mock_database.astype("float32").reshape(len(mock_database),d)
+#uploads them
+index.upsert(vectors=vectors_to_store)
 
-index = faiss.IndexFlatL2(d)   # build the index
+#simulates vector we get from spectogram from random song
+query_vector = [.12, .52, .88]
+results = index.query(vector=query_vector, top_k = 1, include_metadata=True)
 
-index.add(index_data)
-
-D, I = index.search(reshaped_query, 1) 
-
-print(songs[I.item()])
-print(f"The similarity of the search to the database is {D}")
+#it gives us a list of closest matches, we want the best one
+match = results['matches'][0]
+print(f"Found: {match['metadata']['song']}")
+print(f"Similarity score: {match['score']}")

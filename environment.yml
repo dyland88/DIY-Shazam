@@ -13,3 +13,4 @@ dependencies:
   - pip
   - pip:
       - soundfile
+      - pinecone-client
