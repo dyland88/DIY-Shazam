@@ -13,3 +13,5 @@ dependencies:
   - pip
   - pip:
       - soundfile
+      - psycopg2-binary
+      - python-dotenv

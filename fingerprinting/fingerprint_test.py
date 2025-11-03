@@ -11,7 +11,8 @@ from spectrogram.plot_spectrogram import generate_spectrogram
 from fingerprinting.audio_fingerprint import (
     fingerprint_spectrogram,
     visualize_peaks,
-    visualize_constellation
+    visualize_constellation,
+    store_fingerprints
 )
 import matplotlib.pyplot as plt
 
@@ -67,6 +68,7 @@ def main():
     for i, (hash_val, time_offset) in enumerate(fingerprints[:5]):
         print(f"  {i+1}. Hash: {hash_val[:16]}... at time frame {time_offset}")
 
+    store_fingerprints(fingerprints, ("Cello Suite", "Johann Sebastian Bach", len(signal), audio_path.as_posix()))
 
 if __name__ == '__main__':
     main()

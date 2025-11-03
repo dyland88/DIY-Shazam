@@ -11,6 +11,11 @@ import numpy as np
 from scipy.ndimage import maximum_filter, uniform_filter
 from typing import List, Tuple
 import hashlib
+import psycopg2
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def find_peaks(spectrogram: np.ndarray, 
@@ -314,3 +319,70 @@ def visualize_constellation(peaks: List[Tuple[int, int]],
     
     return plt.gcf()
 
+def store_fingerprints(fingerprints: List[Tuple[str, int]], song_details: Tuple[str, str, int, str]):
+    """
+    Stores the fingerprints in the database.
+    
+    First inserts the song into the songs table, then stores all fingerprints
+    associated with that song.
+    
+    :param fingerprints: List of (hash_string, time_offset) tuples
+    :param song_details: Tuple of (song_name, artist, duration_ms, link)
+    :return: song_id of the inserted song
+    """
+    # Load database credentials from environment
+    DB_NAME = os.getenv('DB_NAME')
+    DB_USER = os.getenv('DB_USER')
+    DB_PASSWORD = os.getenv('DB_PASSWORD')
+    DB_HOST = os.getenv('DB_HOST')
+    DB_PORT = os.getenv('DB_PORT')
+    
+    try:
+        conn = psycopg2.connect(
+            dbname=DB_NAME, 
+            user=DB_USER, 
+            password=DB_PASSWORD, 
+            host=DB_HOST, 
+            port=DB_PORT
+        )
+        cur = conn.cursor()
+        
+        # Unpack song details
+        song_name, artist, duration_ms, link = song_details
+        
+        # Step 1: Insert song into songs table and get the song_id
+        # First, get the next available song_id (since it's not auto-incrementing)
+        cur.execute("SELECT COALESCE(MAX(song_id), 0) + 1 FROM songs")
+        song_id = cur.fetchone()[0]
+        
+        # Insert the song
+        cur.execute("""
+            INSERT INTO songs (song_id, name, artist, duration_ms, link)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (song_id, song_name, artist, duration_ms, link))
+        
+        print(f"Inserted song '{song_name}' by {artist} with ID {song_id}")
+        
+        # Step 2: Insert all fingerprints for this song
+        fingerprint_count = 0
+        for hash_value, time_offset in fingerprints:
+            cur.execute("""
+                INSERT INTO fingerprints (hash, offset_time_ms, song_id)
+                VALUES (%s, %s, %s)
+            """, (hash_value, time_offset, song_id))
+            fingerprint_count += 1
+        
+        print(f"Inserted {fingerprint_count} fingerprints for song ID {song_id}")
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return song_id
+        
+    except psycopg2.Error as e:
+        print(f"Error storing fingerprints: {e}")
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return None
