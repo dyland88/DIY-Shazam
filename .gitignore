@@ -293,5 +293,20 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# environment variables
+.env
+.env.local
+.env.*.local
+
+# Audio files (can be large)
+*.wav
+*.mp3
+*.flac
+*.aac
+*.ogg
+*.m4a
+
+
 # End of https://www.toptal.com/developers/gitignore/api/c,python,cmake,linux,macos
+.vscode/dataset_path.txt
 .vscode/
