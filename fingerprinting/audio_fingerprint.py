@@ -320,6 +320,12 @@ def visualize_constellation(peaks: List[Tuple[int, int]],
     
     return plt.gcf()
 
+# Load database credentials from environment
+DB_NAME = os.getenv('DB_NAME')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_HOST = os.getenv('DB_HOST')
+DB_PORT = os.getenv('DB_PORT')
 def store_fingerprints(fingerprints: List[Tuple[str, int]], song_details: Tuple[str, str, int, str]):
     """
     Stores the fingerprints in the database.
@@ -331,12 +337,6 @@ def store_fingerprints(fingerprints: List[Tuple[str, int]], song_details: Tuple[
     :param song_details: Tuple of (song_name, artist, duration_ms, link)
     :return: song_id of the inserted song
     """
-    # Load database credentials from environment
-    DB_NAME = os.getenv('DB_NAME')
-    DB_USER = os.getenv('DB_USER')
-    DB_PASSWORD = os.getenv('DB_PASSWORD')
-    DB_HOST = os.getenv('DB_HOST')
-    DB_PORT = os.getenv('DB_PORT')
     
     try:
         conn = psycopg2.connect(
@@ -388,18 +388,23 @@ def store_fingerprints(fingerprints: List[Tuple[str, int]], song_details: Tuple[
         conn.close()
         return None
 
-def match_fingerprints(fingerprints: List[Tuple[str, int]]):
+def match_fingerprints(fingerprints: List[Tuple[str, int]], k: int = 3):
     """
-    Match query fingerprints against fingerprints stored in the database.
+    Match query audio fingerprints against those stored in the database and return the best song matches.
 
-    Arguments:
-        fingerprints (List[Tuple[str, int]]): 
-            List of fingerprints as (hash_string, time_offset) tuples.
+    This function takes a list of fingerprints obtained from a query audio sample and searches for matching fingerprints in the database.
+    It groups matches by song, aligns matches by their time offsets, and determines the most likely song(s) based on the strongest alignment.
 
-    Returns:
-        matches (Dict[song_id, List[Tuple[int, int, int]]]): 
-            Mapping of song_id to list of (db_offset, query_offset, offset_diff).
-            Or empty dict if error.
+    :param fingerprints: List of (hash_string, time_offset) tuples representing the query audio's fingerprints.
+    :param k: Number of top matches to return
+    :return: List of dictionaries, each containing:
+        - 'song_id': ID of the matched song
+        - 'title': Song name
+        - 'artist': Song artist
+        - 'match_count': Number of matching fingerprints with consistent offset
+        - 'link': Link to the song
+        sorted by match_count descending, then by abs(offset) (favoring smaller)
+      Returns an empty list if no matches are found or if an error occurs.
     """
 
     matches = defaultdict(list)
@@ -417,9 +422,9 @@ def match_fingerprints(fingerprints: List[Tuple[str, int]]):
         if not fingerprints:
             return {}
 
-        query_hash_to_times = {}
+        query_hash_to_times = defaultdict(list)
         for hash_val, q_time in fingerprints:
-            query_hash_to_times.setdefault(hash_val, []).append(q_time)
+            query_hash_to_times[hash_val].append(q_time)
         hash_values = list(query_hash_to_times.keys())
 
         # Batch fetch matching fingerprints from DB
@@ -435,9 +440,62 @@ def match_fingerprints(fingerprints: List[Tuple[str, int]]):
                 offset_diff = db_time - query_time
                 matches[song_id].append((db_time, query_time, offset_diff))
 
+        # Determine song similarity based on number of matching hashes with consistent offset
+        # and return a list of the k most similar songs
+
+        song_scores = []
+        for song_id, match_list in matches.items():
+            # Group by (offset_diff)
+            offset_count = defaultdict(int)
+            for db_time, query_time, offset_diff in match_list:
+                offset_count[offset_diff] += 1
+            if not offset_count:
+                continue
+            # The largest cluster of identical offset_diff determines robustness of alignment
+            best_offset, best_count = max(offset_count.items(), key=lambda x: x[1])
+            song_scores.append({
+                "song_id": song_id,
+                "match_count": best_count,
+                "offset": best_offset,
+                "all_matches": match_list,
+            })
+
+        # Sort by match_count descending, then by abs(offset) (favoring smaller)
+        song_scores.sort(key=lambda x: (-x["match_count"], abs(x["offset"])))
+
+        # Take the top-k
+        top_matches = song_scores[:k]
+
+        # Return only relevant info (e.g., song_id, match_count, offset)
+        # Given top_matches has song_id, collect all song_ids
+        song_id_list = [s["song_id"] for s in top_matches]
+        # Connect to DB to fetch song metadata
+        if not song_id_list:
+            return []
+        # Get song info
+        cur.execute(
+            "SELECT song_id, name, artist, link FROM songs WHERE song_id = ANY(%s);",
+            (song_id_list,)
+        )
+        song_info_dict = {sid: (name, artist, link) for sid, name, artist, link in cur.fetchall()}
         cur.close()
         conn.close()
-        return dict(matches)
+
+        result = []
+        for s in top_matches:
+            sid = s["song_id"]
+            # If song metadata not found, skip
+            if sid not in song_info_dict:
+                continue
+            name, artist, link = song_info_dict[sid]
+            result.append({
+                "song_id": sid,
+                "title": name,
+                "artist": artist,
+                "match_count": s["match_count"],
+                "link": link
+            })
+        return result
     except Exception as e:
         print(f"Error during fingerprint matching: {e}")
         if 'cur' in locals():

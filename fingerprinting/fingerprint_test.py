@@ -12,7 +12,8 @@ from fingerprinting.audio_fingerprint import (
     fingerprint_spectrogram,
     visualize_peaks,
     visualize_constellation,
-    store_fingerprints
+    store_fingerprints,
+    match_fingerprints
 )
 import matplotlib.pyplot as plt
 
@@ -34,6 +35,12 @@ def main():
     print(f"Samples: {len(signal)}")
     print("-" * 60)
     
+    # For testing only a portion of the audio
+    start_time = 10.0
+    duration = 10.0
+    start = int(start_time * sample_rate)
+    end = start + int(duration * sample_rate)
+    signal = signal[start:end]
     # Generate spectrogram
     print("\nGenerating spectrogram...")
     fft_size = 2048
@@ -68,8 +75,9 @@ def main():
     for i, (hash_val, time_offset) in enumerate(fingerprints[:5]):
         print(f"  {i+1}. Hash: {hash_val[:16]}... at time frame {time_offset}")
 
-    store_fingerprints(fingerprints, ("Cello Suite", "Johann Sebastian Bach", len(signal), audio_path.as_posix()))
-
+    #store_fingerprints(fingerprints, ("Cello Suite", "Johann Sebastian Bach", len(signal), audio_path.as_posix()))
+    matches = match_fingerprints(fingerprints, k=3)
+    print(matches)
 if __name__ == '__main__':
     main()
 

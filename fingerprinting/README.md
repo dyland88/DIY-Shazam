@@ -102,6 +102,60 @@ song_id = store_fingerprints(fingerprints, song_details)
 
 ---
 
+#### `match_fingerprints(fingerprints)`
+Matches query fingerprints against the database to identify songs.
+
+**Parameters:**
+- `fingerprints`: List of `(hash_string, time_offset)` tuples from query audio
+
+**Returns:** List of dictionaries, sorted by match quality (best first), containing:
+- `song_id`: Database ID of the matched song
+- `title`: Song name
+- `artist`: Artist name
+- `match_count`: Number of matching fingerprints with consistent time offset
+- `link`: File path to the song
+
+**Algorithm:**
+1. Queries database for all matching hashes
+2. Groups matches by song and time offset
+3. Finds largest cluster of consistent time offsets per song
+4. Returns top matches sorted by cluster size
+
+```python
+# Query audio fingerprints (e.g., from a 10-second clip)
+query_fingerprints = fingerprint_spectrogram(query_spectrogram)
+
+# Match against database
+matches = match_fingerprints(query_fingerprints)
+
+if matches:
+    best_match = matches[0]
+    print(f"Matched: {best_match['title']} by {best_match['artist']}")
+    print(f"Confidence: {best_match['match_count']} matching fingerprints")
+```
+
+**Example Output:**
+```python
+[
+    {
+        'song_id': 1,
+        'title': 'Cello Suite No. 1',
+        'artist': 'Johann Sebastian Bach',
+        'match_count': 389,
+        'link': 'audio/cello_suite.wav'
+    },
+    {
+        'song_id': 2,
+        'title': 'Another Song',
+        'artist': 'Other Artist',
+        'match_count': 12,
+        'link': 'audio/other.wav'
+    }
+]
+```
+
+---
+
 ### Visualization Functions
 
 #### `visualize_peaks(spectrogram, peaks, sample_rate, hop_length)`
@@ -170,7 +224,7 @@ PRIMARY KEY (hash, song_id, offset_time_ms)
 ```python
 import soundfile as sf
 from spectrogram import generate_spectrogram
-from fingerprinting import fingerprint_spectrogram, store_fingerprints
+from fingerprinting import fingerprint_spectrogram, store_fingerprints, match_fingerprints
 ```
 
 ### Step 2: Load Audio File
@@ -243,6 +297,103 @@ Song stored with ID: 1
 - 1 row in `songs` table
 - 8,600 rows in `fingerprints` table
 - Ready for matching!
+
+---
+
+## 🔍 Matching Workflow (Query Audio)
+
+Once you have songs in the database, you can identify unknown audio clips:
+
+### Step 1: Load Query Audio (Short Clip)
+
+```python
+import soundfile as sf
+from spectrogram import generate_spectrogram
+from fingerprinting import fingerprint_spectrogram, match_fingerprints
+
+# Load a short clip (e.g., 10 seconds)
+signal, sample_rate = sf.read('query_clip.wav')
+
+# Or extract a section from a longer file
+full_signal, sr = sf.read('audio/song.wav')
+start_sec, duration_sec = 30, 10  # 10 seconds starting at 30s
+start_sample = int(start_sec * sr)
+end_sample = int((start_sec + duration_sec) * sr)
+query_signal = full_signal[start_sample:end_sample]
+```
+
+### Step 2: Fingerprint the Query
+
+```python
+# Generate spectrogram
+query_spectrogram = generate_spectrogram(
+    query_signal,
+    fft_size=2048,
+    hop_size=512
+)
+
+# Extract fingerprints (use same parameters as when indexing!)
+peaks, constellation, query_fingerprints = fingerprint_spectrogram(
+    query_spectrogram,
+    neighborhood_size=20,
+    amplitude_threshold=15.0,
+    fan_value=5,
+    max_time_delta=200
+)
+
+print(f"Query has {len(query_fingerprints)} fingerprints")
+```
+
+### Step 3: Match Against Database
+
+```python
+# Match
+matches = match_fingerprints(query_fingerprints)
+
+# Display results
+if matches:
+    print(f"\n✓ Found {len(matches)} match(es):\n")
+    for i, match in enumerate(matches, 1):
+        print(f"{i}. {match['title']} by {match['artist']}")
+        print(f"   Match confidence: {match['match_count']} fingerprints")
+        print(f"   Song ID: {match['song_id']}")
+        print()
+    
+    # Best match
+    best = matches[0]
+    print(f"Best match: {best['title']} by {best['artist']}")
+else:
+    print("No matches found")
+```
+
+### Step 4: Example Output
+
+```
+Query has 432 fingerprints
+
+✓ Found 1 match(es):
+
+1. Cello Suite No. 1 by Johann Sebastian Bach
+   Match confidence: 389 fingerprints
+   Song ID: 1
+
+Best match: Cello Suite No. 1 by Johann Sebastian Bach
+```
+
+### Testing Matching
+
+Use the included test script to verify matching works:
+
+```bash
+# Store the full song first
+python fingerprinting/test_section_matching.py --store
+
+# Test matching a 10-second clip starting at 30 seconds
+python fingerprinting/test_section_matching.py --start 30 --duration 10
+
+# Test multiple clip positions
+python fingerprinting/test_section_matching.py --multi
+```
 
 ---
 
