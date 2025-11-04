@@ -3,6 +3,8 @@ from .audio_fingerprint import (
     generate_constellation_map,
     generate_fingerprints,
     fingerprint_spectrogram,
+    store_fingerprints,
+    match_fingerprints,
     visualize_peaks,
     visualize_constellation
 )
@@ -12,6 +14,8 @@ __all__ = [
     'generate_constellation_map',
     'generate_fingerprints',
     'fingerprint_spectrogram',
+    'store_fingerprints',
+    'match_fingerprints',
     'visualize_peaks',
     'visualize_constellation'
 ]
