@@ -14,6 +14,7 @@ import hashlib
 import psycopg2
 import os
 from dotenv import load_dotenv
+from collections import defaultdict
 
 load_dotenv()
 
@@ -386,3 +387,61 @@ def store_fingerprints(fingerprints: List[Tuple[str, int]], song_details: Tuple[
         cur.close()
         conn.close()
         return None
+
+def match_fingerprints(fingerprints: List[Tuple[str, int]]):
+    """
+    Match query fingerprints against fingerprints stored in the database.
+
+    Arguments:
+        fingerprints (List[Tuple[str, int]]): 
+            List of fingerprints as (hash_string, time_offset) tuples.
+
+    Returns:
+        matches (Dict[song_id, List[Tuple[int, int, int]]]): 
+            Mapping of song_id to list of (db_offset, query_offset, offset_diff).
+            Or empty dict if error.
+    """
+
+    matches = defaultdict(list)
+    try:
+        conn = psycopg2.connect(
+            dbname=DB_NAME, 
+            user=DB_USER, 
+            password=DB_PASSWORD, 
+            host=DB_HOST, 
+            port=DB_PORT
+        )
+        cur = conn.cursor()
+
+        # For efficiency, collect all hashes from query
+        if not fingerprints:
+            return {}
+
+        query_hash_to_times = {}
+        for hash_val, q_time in fingerprints:
+            query_hash_to_times.setdefault(hash_val, []).append(q_time)
+        hash_values = list(query_hash_to_times.keys())
+
+        # Batch fetch matching fingerprints from DB
+        cur.execute(
+            "SELECT hash, offset_time_ms, song_id FROM fingerprints WHERE hash = ANY(%s);",
+            (hash_values,)
+        )
+
+        db_fingerprints = cur.fetchall()  # (hash, db_time, song_id)
+
+        for hash_val, db_time, song_id in db_fingerprints:
+            for query_time in query_hash_to_times.get(hash_val, []):
+                offset_diff = db_time - query_time
+                matches[song_id].append((db_time, query_time, offset_diff))
+
+        cur.close()
+        conn.close()
+        return dict(matches)
+    except Exception as e:
+        print(f"Error during fingerprint matching: {e}")
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals():
+            conn.close()
+        return {}
