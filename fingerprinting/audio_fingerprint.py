@@ -69,11 +69,11 @@ def find_peaks(spectrogram: np.ndarray,
 
     # Apply maximum filter to find local maxima
     local_max = maximum_filter(spectrogram, size=neighborhood_size) == spectrogram
-    train_size = (35, 35)
-    guard_size = (15, 15)
-    threshold_factor = 15
-    print("Cfaring...")
-    cfar_peaks = cfar(train_size, guard_size, threshold_factor)
+    #train_size = (35, 35)
+    #guard_size = (15, 15)
+    #threshold_factor = 15
+    #print("Cfaring...")
+    #cfar_peaks = cfar(train_size, guard_size, threshold_factor)
 
     
     # Apply amplitude threshold

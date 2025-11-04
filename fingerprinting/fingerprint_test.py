@@ -4,6 +4,7 @@ Demo script showing the complete Shazam-style fingerprinting pipeline
 
 import soundfile as sf
 from pathlib import Path
+import numpy as np
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -17,6 +18,15 @@ from fingerprinting.audio_fingerprint import (
 )
 import matplotlib.pyplot as plt
 
+def add_gaussian_noise(signal, noise_level=0.1):
+    """
+    Adds Gaussian noise to the signal.
+    """
+    signal = np.asarray(signal)
+    noise = np.random.normal(0, noise_level, size=signal.shape)
+    signal = signal + noise
+    signal = np.clip(signal, -1, 1)
+    return signal
 
 def main():
     # Load audio file
@@ -35,12 +45,17 @@ def main():
     print(f"Samples: {len(signal)}")
     print("-" * 60)
     
-    # For testing only a portion of the audio
+    # Optional: Only test a portion of the audio
     start_time = 10.0
     duration = 10.0
     start = int(start_time * sample_rate)
     end = start + int(duration * sample_rate)
-    signal = signal[start:end]
+    #signal = signal[start:end]
+
+    # Optional: Add noise to the signal
+    #signal = add_gaussian_noise(signal, noise_level=0.025)
+    #sf.write(script_dir / 'audio' / 'cello_suite_noisy.wav', signal, sample_rate)
+
     # Generate spectrogram
     print("\nGenerating spectrogram...")
     fft_size = 2048
